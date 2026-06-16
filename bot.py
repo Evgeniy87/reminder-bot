@@ -15,7 +15,7 @@ from telegram.ext import (
 )
 
 # ── Config ────────────────────────────────────────────────────────────────────
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8876477393:AAEuiTfmsO-zTiNeCWuNSrZpmCla8WSjhFw")
 TIMEZONE  = ZoneInfo("Europe/Kyiv")
 DB_PATH   = "reminders.db"
 
