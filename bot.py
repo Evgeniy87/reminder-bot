@@ -1,9 +1,10 @@
 import logging
 import sqlite3
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from telegram import Update, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -14,13 +15,12 @@ from telegram.ext import (
 )
 
 # ── Config ────────────────────────────────────────────────────────────────────
-BOT_TOKEN = "8876477393:AAEuiTfmsO-zTiNeCWuNSrZpmCla8WSjhFw"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 TIMEZONE  = ZoneInfo("Europe/Kyiv")
 DB_PATH   = "reminders.db"
 
-# Daily morning broadcast. Set to [] to disable.
 DAILY_BROADCASTS = [
-    {"hour": 9, "minute": 0, "text": "☀️ Гарного ранку! Перевір свої нагадування: /list"},
+    {"hour": 9, "minute": 0, "text": "☀️ Гарного ранку! Перевір свої нагадування 👇"},
 ]
 
 logging.basicConfig(
@@ -31,6 +31,21 @@ log = logging.getLogger(__name__)
 
 # ConversationHandler states
 ASK_TEXT, ASK_TIME = range(2)
+
+# ── Keyboards ─────────────────────────────────────────────────────────────────
+MAIN_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton("🔔 Нове нагадування")],
+        [KeyboardButton("📋 Мої нагадування"), KeyboardButton("🗑 Видалити")],
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+)
+
+CANCEL_KEYBOARD = ReplyKeyboardMarkup(
+    [[KeyboardButton("❌ Скасувати")]],
+    resize_keyboard=True,
+)
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -77,18 +92,17 @@ def fmt_local(iso: str) -> str:
 # ── /start ────────────────────────────────────────────────────────────────────
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Привіт! Я твій особистий бот-нагадувач.\n\n"
-        "📌 Команди:\n"
-        "/remind — додати нагадування\n"
-        "/list — переглянути активні\n"
-        "/delete <id> — видалити\n"
-        "/cancel — скасувати поточну дію"
+        "👋 Привіт! Я твій особистий бот-нагадувач.\nОбери дію 👇",
+        reply_markup=MAIN_KEYBOARD,
     )
 
 
-# ── /remind conversation ──────────────────────────────────────────────────────
+# ── New reminder conversation ─────────────────────────────────────────────────
 async def remind_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📝 Про що нагадати?")
+    await update.message.reply_text(
+        "📝 Про що нагадати?",
+        reply_markup=CANCEL_KEYBOARD,
+    )
     return ASK_TEXT
 
 async def remind_got_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -96,10 +110,11 @@ async def remind_got_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🕐 Коли нагадати?\n\n"
         "Формати:\n"
-        "• `14:30` — сьогодні о 14:30\n"
-        "• `25.06 14:30` — 25 червня\n"
-        "• `25.06.2026 14:30` — конкретна дата",
+        "• `14:30` — сьогодні\n"
+        "• `25.06 14:30`\n"
+        "• `25.06.2026 14:30`",
         parse_mode="Markdown",
+        reply_markup=CANCEL_KEYBOARD,
     )
     return ASK_TIME
 
@@ -109,41 +124,43 @@ async def remind_got_time(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if dt_utc is None:
         await update.message.reply_text(
-            "❌ Не розумію цей формат. Спробуй ще раз:\n"
+            "❌ Не розумію формат. Спробуй ще раз:\n"
             "• `14:30`\n• `25.06 14:30`\n• `25.06.2026 14:30`",
             parse_mode="Markdown",
+            reply_markup=CANCEL_KEYBOARD,
         )
-        return ASK_TIME  # stay in same state, ask again
+        return ASK_TIME
 
-    now_utc = datetime.now(ZoneInfo("UTC"))
-    if dt_utc <= now_utc:
-        await update.message.reply_text("❌ Цей час вже минув. Вкажи майбутній час.")
+    if dt_utc <= datetime.now(ZoneInfo("UTC")):
+        await update.message.reply_text(
+            "❌ Цей час вже минув. Вкажи майбутній час.",
+            reply_markup=CANCEL_KEYBOARD,
+        )
         return ASK_TIME
 
     text = ctx.user_data.pop("remind_text")
-    chat_id = update.effective_chat.id
-
     with db() as conn:
         conn.execute(
             "INSERT INTO reminders (chat_id, text, remind_at) VALUES (?, ?, ?)",
-            (chat_id, text, dt_utc.isoformat()),
+            (update.effective_chat.id, text, dt_utc.isoformat()),
         )
 
     await update.message.reply_text(
-        f"✅ Готово!\n\n"
+        f"✅ Нагадування встановлено!\n\n"
         f"📝 {text}\n"
         f"🕐 {fmt_local(dt_utc.isoformat())}",
+        reply_markup=MAIN_KEYBOARD,
     )
     return ConversationHandler.END
 
 async def remind_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.clear()
-    await update.message.reply_text("❌ Скасовано.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("❌ Скасовано.", reply_markup=MAIN_KEYBOARD)
     return ConversationHandler.END
 
 
-# ── /list ─────────────────────────────────────────────────────────────────────
-async def cmd_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ── List reminders ────────────────────────────────────────────────────────────
+async def show_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     with db() as conn:
         rows = conn.execute(
@@ -152,27 +169,66 @@ async def cmd_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ).fetchall()
 
     if not rows:
-        await update.message.reply_text("📭 Активних нагадувань немає.")
+        await update.message.reply_text(
+            "📭 Активних нагадувань немає.",
+            reply_markup=MAIN_KEYBOARD,
+        )
         return
 
     lines = ["📋 *Твої нагадування:*\n"]
     for r in rows:
-        lines.append(f"🔔 *#{r['id']}* {fmt_local(r['remind_at'])}\n   {r['text']}")
+        lines.append(f"🔔 *#{r['id']}* — {fmt_local(r['remind_at'])}\n   {r['text']}")
 
-    await update.message.reply_text("\n\n".join(lines), parse_mode="Markdown")
+    await update.message.reply_text(
+        "\n\n".join(lines),
+        parse_mode="Markdown",
+        reply_markup=MAIN_KEYBOARD,
+    )
 
 
-# ── /delete ───────────────────────────────────────────────────────────────────
-async def cmd_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ── Delete conversation ───────────────────────────────────────────────────────
+ASK_DELETE_ID = 2
+
+async def delete_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    if not ctx.args:
-        await update.message.reply_text("Вкажи ID: /delete 3\n\nДивись ID у /list")
-        return
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT id, text, remind_at FROM reminders WHERE chat_id=? AND done=0 ORDER BY remind_at",
+            (chat_id,),
+        ).fetchall()
+
+    if not rows:
+        await update.message.reply_text(
+            "📭 Нема чого видаляти.",
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return ConversationHandler.END
+
+    # Build a keyboard with one button per reminder
+    buttons = [
+        [KeyboardButton(f"#{r['id']} — {fmt_local(r['remind_at'])} — {r['text'][:30]}")]
+        for r in rows
+    ]
+    buttons.append([KeyboardButton("❌ Скасувати")])
+
+    await update.message.reply_text(
+        "🗑 Яке нагадування видалити?",
+        reply_markup=ReplyKeyboardMarkup(buttons, resize_keyboard=True),
+    )
+    return ASK_DELETE_ID
+
+async def delete_got_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    chat_id = update.effective_chat.id
+
     try:
-        rid = int(ctx.args[0])
-    except ValueError:
-        await update.message.reply_text("❌ ID має бути числом.")
-        return
+        rid = int(text.split("—")[0].replace("#", "").strip())
+    except (ValueError, IndexError):
+        await update.message.reply_text(
+            "❌ Не вдалося визначити ID. Спробуй ще раз.",
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return ConversationHandler.END
 
     with db() as conn:
         cur = conn.execute(
@@ -180,12 +236,14 @@ async def cmd_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
 
     if cur.rowcount:
-        await update.message.reply_text(f"🗑 Нагадування #{rid} видалено.")
+        await update.message.reply_text(f"🗑 Нагадування #{rid} видалено.", reply_markup=MAIN_KEYBOARD)
     else:
-        await update.message.reply_text(f"❌ Нагадування #{rid} не знайдено.")
+        await update.message.reply_text(f"❌ Нагадування #{rid} не знайдено.", reply_markup=MAIN_KEYBOARD)
+
+    return ConversationHandler.END
 
 
-# ── Background: fire due reminders ───────────────────────────────────────────
+# ── Background jobs ───────────────────────────────────────────────────────────
 async def check_reminders(ctx: ContextTypes.DEFAULT_TYPE):
     now_utc = datetime.now(ZoneInfo("UTC"))
     with db() as conn:
@@ -204,8 +262,6 @@ async def check_reminders(ctx: ContextTypes.DEFAULT_TYPE):
                 log.warning("Failed to send reminder %d: %s", r["id"], e)
             conn.execute("UPDATE reminders SET done=1 WHERE id=?", (r["id"],))
 
-
-# ── Background: daily broadcast ───────────────────────────────────────────────
 async def daily_broadcast(ctx: ContextTypes.DEFAULT_TYPE):
     text = ctx.job.data
     with db() as conn:
@@ -222,19 +278,33 @@ def main():
     init_db()
     app = Application.builder().token(BOT_TOKEN).build()
 
-    conv = ConversationHandler(
-        entry_points=[CommandHandler("remind", remind_start)],
+    remind_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^🔔 Нове нагадування$"), remind_start)],
         states={
             ASK_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, remind_got_text)],
             ASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, remind_got_time)],
         },
-        fallbacks=[CommandHandler("cancel", remind_cancel)],
+        fallbacks=[
+            MessageHandler(filters.Regex("^❌ Скасувати$"), remind_cancel),
+            CommandHandler("cancel", remind_cancel),
+        ],
     )
 
-    app.add_handler(CommandHandler("start",  cmd_start))
-    app.add_handler(CommandHandler("list",   cmd_list))
-    app.add_handler(CommandHandler("delete", cmd_delete))
-    app.add_handler(conv)
+    delete_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^🗑 Видалити$"), delete_start)],
+        states={
+            ASK_DELETE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, delete_got_id)],
+        },
+        fallbacks=[
+            MessageHandler(filters.Regex("^❌ Скасувати$"), remind_cancel),
+            CommandHandler("cancel", remind_cancel),
+        ],
+    )
+
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(MessageHandler(filters.Regex("^📋 Мої нагадування$"), show_list))
+    app.add_handler(remind_conv)
+    app.add_handler(delete_conv)
 
     app.job_queue.run_repeating(check_reminders, interval=60, first=5)
 
@@ -245,7 +315,6 @@ def main():
 
     log.info("Bot started.")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
