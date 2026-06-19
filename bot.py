@@ -284,6 +284,8 @@ def main():
         },
         fallbacks=[
             MessageHandler(filters.Regex("^❌ Cancel$"), remind_cancel),
+            MessageHandler(filters.Regex("^🗑 Delete$"), remind_cancel),
+            MessageHandler(filters.Regex("^📋 My Reminders$"), remind_cancel),
             CommandHandler("cancel", remind_cancel),
         ],
     )
@@ -295,6 +297,8 @@ def main():
         },
         fallbacks=[
             MessageHandler(filters.Regex("^❌ Cancel$"), remind_cancel),
+            MessageHandler(filters.Regex("^🔔 New Reminder$"), remind_cancel),
+            MessageHandler(filters.Regex("^📋 My Reminders$"), remind_cancel),
             CommandHandler("cancel", remind_cancel),
         ],
     )
