@@ -288,6 +288,7 @@ def main():
             MessageHandler(filters.Regex("^📋 My Reminders$"), remind_cancel),
             CommandHandler("cancel", remind_cancel),
         ],
+        allow_reentry=True,
     )
 
     delete_conv = ConversationHandler(
@@ -301,6 +302,7 @@ def main():
             MessageHandler(filters.Regex("^📋 My Reminders$"), remind_cancel),
             CommandHandler("cancel", remind_cancel),
         ],
+        allow_reentry=True,
     )
 
     app.add_handler(CommandHandler("start", cmd_start))
