@@ -280,13 +280,23 @@ def main():
     remind_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🔔 New Reminder$"), remind_start)],
         states={
-            ASK_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, remind_got_text)],
-            ASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, remind_got_time)],
+            ASK_TEXT: [
+                MessageHandler(filters.Regex("^❌ Cancel$"), remind_cancel),
+                MessageHandler(filters.Regex("^🗑 Delete$"), remind_cancel),
+                MessageHandler(filters.Regex("^📋 My Reminders$"), remind_cancel),
+                MessageHandler(filters.Regex("^🏠 Start$"), remind_cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, remind_got_text),
+            ],
+            ASK_TIME: [
+                MessageHandler(filters.Regex("^❌ Cancel$"), remind_cancel),
+                MessageHandler(filters.Regex("^🗑 Delete$"), remind_cancel),
+                MessageHandler(filters.Regex("^📋 My Reminders$"), remind_cancel),
+                MessageHandler(filters.Regex("^🏠 Start$"), remind_cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, remind_got_time),
+            ],
         },
         fallbacks=[
             MessageHandler(filters.Regex("^❌ Cancel$"), remind_cancel),
-            MessageHandler(filters.Regex("^🗑 Delete$"), remind_cancel),
-            MessageHandler(filters.Regex("^📋 My Reminders$"), remind_cancel),
             CommandHandler("cancel", remind_cancel),
         ],
         allow_reentry=True,
@@ -295,12 +305,16 @@ def main():
     delete_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🗑 Delete$"), delete_start)],
         states={
-            ASK_DELETE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, delete_got_id)],
+            ASK_DELETE_ID: [
+                MessageHandler(filters.Regex("^❌ Cancel$"), remind_cancel),
+                MessageHandler(filters.Regex("^🔔 New Reminder$"), remind_cancel),
+                MessageHandler(filters.Regex("^📋 My Reminders$"), remind_cancel),
+                MessageHandler(filters.Regex("^🏠 Start$"), remind_cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, delete_got_id),
+            ],
         },
         fallbacks=[
             MessageHandler(filters.Regex("^❌ Cancel$"), remind_cancel),
-            MessageHandler(filters.Regex("^🔔 New Reminder$"), remind_cancel),
-            MessageHandler(filters.Regex("^📋 My Reminders$"), remind_cancel),
             CommandHandler("cancel", remind_cancel),
         ],
         allow_reentry=True,
