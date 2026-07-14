@@ -36,6 +36,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🔔 New Reminder")],
         [KeyboardButton("📋 My Reminders"), KeyboardButton("🗑 Delete")],
+        [KeyboardButton("🏠 Start")],
     ],
     resize_keyboard=True,
     is_persistent=True,
@@ -306,6 +307,7 @@ def main():
     )
 
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(MessageHandler(filters.Regex("^🏠 Start$"), cmd_start))
     app.add_handler(MessageHandler(filters.Regex("^📋 My Reminders$"), show_list))
     app.add_handler(remind_conv)
     app.add_handler(delete_conv)
